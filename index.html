@@ -1,0 +1,271 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DockReady | Shipment Dashboard</title>
+<style>
+:root {
+  --navy: #17324d;
+  --blue: #2864a5;
+  --bg: #f3f6fa;
+  --border: #dce4ed;
+  --text: #243447;
+  --muted: #65758a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  background: var(--navy);
+  color: white;
+  padding: 22px max(20px, calc((100% - 1100px)/2));
+}
+header h1 { margin: 0 0 6px; }
+header p { margin: 0; color: #dce8f4; }
+main { max-width: 1100px; margin: auto; padding: 24px 18px; }
+.notice {
+  background: #fff7d9;
+  border: 1px solid #ead58a;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.card, .panel {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.card span { color: var(--muted); font-size: 14px; }
+.card strong { display: block; font-size: 27px; margin-top: 8px; }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+input, select, button {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+input, select { background: white; max-width: 100%; }
+button { cursor: pointer; background: var(--blue); color: white; border: 0; }
+button:hover { opacity: .9; }
+.secondary { background: #e8eef6; color: var(--navy); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: white; }
+th, td {
+  text-align: left;
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+th { background: #edf2f8; }
+.status {
+  display: inline-block;
+  border-radius: 20px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.ready { background: #d9f4e3; color: #17643a; }
+.attention { background: #ffe7c2; color: #8b4b00; }
+.late { background: #ffdddd; color: #9d2525; }
+.small { font-size: 12px; color: var(--muted); }
+footer { text-align: center; padding: 20px; color: var(--muted); font-size: 13px; }
+@media (max-width: 650px) {
+  .summary { grid-template-columns: 1fr; }
+  main { padding: 16px 10px; }
+  header { padding: 20px 14px; }
+  .toolbar { align-items: stretch; flex-direction: column; }
+  .toolbar input, .toolbar select, .toolbar button { width: 100%; }
+  th, td { padding: 10px 8px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>DockReady</h1>
+  <p>Incoming shipment dashboard</p>
+</header>
+<main>
+  <div class="notice">
+    <strong>Academic prototype:</strong> all shipment records are fictional sample data.
+    This demo does not track real containers.
+  </div>
+
+  <section class="summary">
+    <div class="card"><span>Total shipments</span><strong id="total">8</strong></div>
+    <div class="card"><span>Need attention</span><strong id="attentionCount">0</strong></div>
+    <div class="card"><span>Documents pending</span><strong id="pendingCount">0</strong></div>
+  </section>
+
+  <section class="panel">
+    <h2>Shipment overview</h2>
+    <p class="small">Status alerts are calculated from the arrival date and document status.</p>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search shipment reference">
+      <select id="filter">
+        <option value="all">All shipments</option>
+        <option value="attention">Need attention</option>
+        <option value="pending">Documents pending</option>
+        <option value="ready">Ready</option>
+      </select>
+      <button id="add">Add shipment</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reference</th><th>Arrival date</th><th>Documents</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="shipments"></tbody>
+      </table>
+    </div>
+  </section>
+  <p class="small">Changes are saved in this browser on this device.</p>
+</main>
+<footer>DockReady · Fictional academic project</footer>
+
+<script>
+const initial = [
+ {ref:"DR-1001",date:3,docs:"Complete"},
+ {ref:"DR-1002",date:0,docs:"Pending"},
+ {ref:"DR-1003",date:7,docs:"Complete"},
+ {ref:"DR-1004",date:2,docs:"Pending"},
+ {ref:"DR-1005",date:14,docs:"Complete"},
+ {ref:"DR-1006",date:1,docs:"Complete"},
+ {ref:"DR-1007",date:10,docs:"Pending"},
+ {ref:"DR-1008",date:5,docs:"Complete"}
+];
+const today = new Date();
+today.setHours(0,0,0,0);
+function dateString(days) {
+ const d = new Date(today);
+ d.setDate(d.getDate()+days);
+ return d.toISOString().slice(0,10);
+}
+function readSaved() {
+ try {
+  const saved = localStorage.getItem("dockready-data");
+  return saved ? JSON.parse(saved) : null;
+ } catch(e) { return null; }
+}
+let shipments = readSaved() || initial.map(x=>({
+ ref:x.ref, date:dateString(x.date), docs:x.docs
+}));
+function save() {
+ localStorage.setItem("dockready-data", JSON.stringify(shipments));
+}
+function getStatus(s) {
+ const days = Math.ceil((new Date(s.date+"T00:00:00")-today)/86400000);
+ if (s.docs === "Pending") return {label:"Documents pending",cls:"attention",attention:true};
+ if (days < 0) return {label:"Date passed",cls:"late",attention:true};
+ if (days <= 3) return {label:"Arriving soon",cls:"attention",attention:true};
+ return {label:"Ready",cls:"ready",attention:false};
+}
+function render() {
+ const q = document.getElementById("search").value.toLowerCase();
+ const f = document.getElementById("filter").value;
+ document.getElementById("total").textContent=shipments.length;
+ document.getElementById("attentionCount").textContent=shipments.filter(s=>getStatus(s).attention).length;
+ document.getElementById("pendingCount").textContent=shipments.filter(s=>s.docs==="Pending").length;
+ const list=shipments.filter(s=>{
+  const st=getStatus(s);
+  return s.ref.toLowerCase().includes(q) &&
+   (f==="all" || (f==="attention" && st.attention) ||
+    (f==="pending" && s.docs==="Pending") || (f==="ready" && st.label==="Ready"));
+ });
+ const body=document.getElementById("shipments");
+ body.innerHTML="";
+ if (!list.length) {
+  body.innerHTML='<tr><td colspan="5">No shipments found.</td></tr>';
+  return;
+ }
+ list.forEach(s=>{
+  const st=getStatus(s);
+  const tr=document.createElement("tr");
+  [s.ref,s.date,s.docs,st.label].forEach((value,i)=>{
+   const td=document.createElement("td");
+   if(i===3) {
+    const badge=document.createElement("span");
+    badge.className="status "+st.cls;
+    badge.textContent=value;
+    td.appendChild(badge);
+   } else td.textContent=value;
+   tr.appendChild(td);
+  });
+  const action=document.createElement("td");
+  const btn=document.createElement("button");
+  btn.className="secondary";
+  btn.textContent="Edit";
+  btn.onclick=()=>edit(s.ref);
+  action.appendChild(btn);
+  tr.appendChild(action);
+  body.appendChild(tr);
+ });
+}
+function edit(ref) {
+ const s=shipments.find(x=>x.ref===ref);
+ if(!s) return;
+ const date=prompt("Estimated arrival date (YYYY-MM-DD):",s.date);
+ if(date===null) return;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(new Date(date).getTime())) {
+  alert("Please enter a valid date in YYYY-MM-DD format.");
+  return;
+ }
+ const docs=prompt("Document status: type Complete or Pending",s.docs);
+ if(docs===null) return;
+ if(!["Complete","Pending"].includes(docs)) {
+  alert("Please type Complete or Pending.");
+  return;
+ }
+ s.date=date;
+ s.docs=docs;
+ save();
+ render();
+}
+document.getElementById("search").addEventListener("input",render);
+document.getElementById("filter").addEventListener("change",render);
+document.getElementById("add").addEventListener("click",()=>{
+ const ref=prompt("New shipment reference:");
+ if(!ref || shipments.some(s=>s.ref===ref.trim())) {
+  if(ref) alert("Please use a new reference.");
+  return;
+ }
+ const date=prompt("Arrival date (YYYY-MM-DD):",dateString(5));
+ if(!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(new Date(date).getTime())) {
+  alert("Please enter a valid date.");
+  return;
+ }
+ const docs=prompt("Document status: type Complete or Pending","Pending");
+ if(!["Complete","Pending"].includes(docs)) {
+  alert("Please type Complete or Pending.");
+  return;
+ }
+ shipments.push({ref:ref.trim(),date,docs});
+ save();
+ render();
+});
+render();
+</script>
+</body>
+</html>
